@@ -27,6 +27,36 @@ import React, { useEffect, useMemo, useState } from "react";
 // =========================
 type AdapterName = "mock" | "sheets";
 
+const APPS_SCRIPT_BASE_URL = "https://script.google.com/macros/s/AKfycbw_cV-YyxjxWuWtNYC9sd4MKrVz2GyOc1vIa-73QeCVA4HwPmKaLyd_m9f4fTU9dY7_Og/execERE";
+const SHEET_ID_KEY = "wt_sheet_id";
+
+function sheetId(): string {
+  return localStorage.getItem(SHEET_ID_KEY) || "";
+}
+
+async function getJSON(action: string, params: Record<string,string>) {
+  const url = new URL(APPS_SCRIPT_BASE_URL);
+  url.searchParams.set("action", action);
+  if (!url.searchParams.has("sheetId")) url.searchParams.set("sheetId", sheetId());
+  Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
+  const r = await fetch(url.toString());
+  if (!r.ok) throw new Error(`${action} failed`);
+  return r.json();
+}
+
+async function postJSON(action: string, payload: any) {
+  const r = await fetch(APPS_SCRIPT_BASE_URL, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action, sheetId: sheetId(), payload }),
+  });
+  if (!r.ok) throw new Error(`${action} failed`);
+  return r.json();
+}
+
+// =========================
+// EXPORTS
+// =========================
 export type Exercise = {
   id: string;
   name: string;
@@ -170,37 +200,54 @@ class MockAdapter implements DataAdapter {
 // ===== Google Sheets Adapter via Apps Script REST
 // You will create an Apps Script web app that accepts GET/POST for different actions
 // Minimal example Apps Script is provided at the bottom of this file
-const APPS_SCRIPT_BASE_URL = ""; // e.g., "https://script.google.com/macros/s/AKfycbx.../exec"
 
 class GoogleSheetsAdapter implements DataAdapter {
-  base = APPS_SCRIPT_BASE_URL;
-  async listDays() {
-    const r = await fetch(`${this.base}?action=listDays`);
-    return r.json();
+  async listDays(): Promise<{ id: string; name: string }[]> {
+    const j = await getJSON("listDays", {});
+    // j.days: [{ day_id, day_name }]
+    return (j.days as Array<{ day_id: string; day_name: string }>).map(d => ({
+      id: String(d.day_id),
+      name: d.day_name,
+    }));
   }
-  async getPlanForDay(day_id: string) {
-    const r = await fetch(`${this.base}?action=getPlanForDay&day_id=${encodeURIComponent(day_id)}`);
-    return r.json();
+
+  async getPlanForDay(dayId: string): Promise<{
+    plan: PlanRow[];
+    exercises: Record<string, Exercise>;
+  }> {
+    const j = await getJSON("getPlanForDay", { day: String(dayId) });
+    return {
+      plan: j.plan as PlanRow[],
+      exercises: j.exercises as Record<string, Exercise>,
+    };
   }
-  async saveStrengthLog(log: StrengthLog) {
-    const r = await fetch(this.base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "saveStrengthLog", payload: log }) });
-    return r.json();
+
+  async saveStrengthLog(log: StrengthLog): Promise<{ ok: boolean }> {
+    await postJSON("saveStrengthLog", log);
+    return { ok: true };
   }
-  async listCardio() {
-    const r = await fetch(`${this.base}?action=listCardio`);
-    return r.json();
+
+  async listCardio(): Promise<{ plan: CardioPlanRow[]; logs: CardioLog[] }> {
+    const j = await getJSON("listCardio", {});
+    // Apps Script returns { cardio, logs }
+    const plan = (j.cardio ?? []) as CardioPlanRow[];
+    const logs = (j.logs ?? []) as CardioLog[];
+    return { plan, logs };
   }
-  async saveCardioLog(log: CardioLog) {
-    const r = await fetch(this.base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "saveCardioLog", payload: log }) });
-    return r.json();
+
+  async saveCardioLog(log: CardioLog): Promise<{ ok: boolean }> {
+    await postJSON("saveCardioLog", log);
+    return { ok: true };
   }
-  async addExercise(ex: Exercise) {
-    const r = await fetch(this.base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "addExercise", payload: ex }) });
-    return r.json();
+
+  async addExercise(ex: Exercise): Promise<{ ok: boolean; exercise_id: string }> {
+    await postJSON("addExercise", ex);
+    return { ok: true, exercise_id: ex.id };
   }
-  async addPlanRow(row: PlanRow) {
-    const r = await fetch(this.base, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action: "addPlanRow", payload: row }) });
-    return r.json();
+
+  async addPlanRow(row: PlanRow): Promise<{ ok: boolean }> {
+    await postJSON("addPlanRow", row);
+    return { ok: true };
   }
 }
 
@@ -484,7 +531,8 @@ function CardioView({ adapter }: { adapter: DataAdapter }) {
   );
 }
 
-function Tabs({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+function Tabs({ value, onChange }: { value: string; onChange: React.Dispatch<React.SetStateAction<string>> }) { 
+
   return (
     <div className="flex gap-2 p-1 bg-gray-100 rounded-2xl w-full max-w-full">
       {["Daily Workout", "Cardio", "Settings"].map(tab => (
@@ -505,33 +553,93 @@ function SettingsView({
   adapterName: AdapterName;
   setAdapterName: React.Dispatch<React.SetStateAction<AdapterName>>;
 }) {
+  const [sheetIdInput, setSheetIdInput] = React.useState<string>(
+    localStorage.getItem(SHEET_ID_KEY) || ""
+  );
+
+async function createBackend() {
+  try {
+    const popup = window.open(
+      `${APPS_SCRIPT_BASE_URL}?action=provisionPopup`,
+      "_blank",
+      "popup,width=520,height=640"
+    );
+    if (!popup) {
+      alert("Popup blocked. Allow popups for this site and try again.");
+      return;
+    }
+
+    // One-shot listener for the Apps Script message
+    const onMsg = (ev: MessageEvent) => {
+      const data = ev.data as any;
+      if (data && data.type === "wt/provisioned" && data.sheetId) {
+        localStorage.setItem(SHEET_ID_KEY, data.sheetId);
+        setAdapterName("sheets");
+        try { popup.close(); } catch {}
+        alert(`Backend created. You can open the Sheet at:\n${data.url}`);
+        window.removeEventListener("message", onMsg);
+      }
+    };
+    window.addEventListener("message", onMsg, { once: true });
+  } catch (e: any) {
+    alert("Provision error: " + e.message);
+  }
+}
+
+  function useTypedSheet() {
+    const id = sheetIdInput.trim();
+    if (!id) {
+      alert("Paste a Google Sheet ID first");
+      return;
+    }
+    localStorage.setItem(SHEET_ID_KEY, id);
+    setAdapterName("sheets");
+  }
 
   return (
-    <div className="grid gap-4">
-      <Section title="Data source">
-        <div className="flex items-center gap-3">
-          <select value={adapterName} onChange={e => setAdapterName(e.target.value as AdapterName)} className="px-3 py-2 rounded-xl border">
-            <option value="mock">Mock (local demo)</option>
-            <option value="sheets">Google Sheets via Apps Script</option>
-          </select>
-          {adapterName === "sheets" && !APPS_SCRIPT_BASE_URL && (
-            <div className="text-sm text-orange-600">Set APPS_SCRIPT_BASE_URL in code</div>
-          )}
-        </div>
-      </Section>
+    <div className="space-y-4">
+      {/* Adapter selector */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium">Data source</label>
+        <select
+          value={adapterName}
+          onChange={(e) => setAdapterName(e.target.value as AdapterName)}
+          className="px-3 py-2 rounded-xl border"
+        >
+          <option value="mock">Mock (local demo)</option>
+          <option value="sheets">Google Sheets via Apps Script</option>
+        </select>
+      </div>
 
-      <Section title="How to upload your base plan">
-        <ol className="list-decimal ml-6 grid gap-2 text-sm">
-          <li>Create the Google Sheet with the schemas listed at the bottom of this file.</li>
-          <li>Paste your base plan into the WorkoutPlan sheet. One row per set per exercise.</li>
-          <li>Publish the Apps Script web app and paste the URL into APPS_SCRIPT_BASE_URL.</li>
-          <li>Switch adapter above to Google Sheets.</li>
-        </ol>
-      </Section>
+      {/* One-click backend creation */}
+      <button
+        className="px-3 py-2 rounded-xl border"
+        onClick={createBackend}
+      >
+        Create backend in my Google Drive
+      </button>
+
+      {/* Use an existing Sheet */}
+      <div className="space-y-2">
+        <label className="block text-sm font-medium">Existing Sheet ID</label>
+        <div className="flex items-center gap-2">
+          <input
+            placeholder="Paste existing Google Sheet ID"
+            className="px-3 py-2 rounded-xl border w-full"
+            value={sheetIdInput}
+            onChange={(e) => setSheetIdInput(e.target.value)}
+            onBlur={() =>
+              localStorage.setItem(SHEET_ID_KEY, sheetIdInput.trim())
+            }
+          />
+          <button className="px-3 py-2 rounded-xl border" onClick={useTypedSheet}>
+            Use this Sheet
+          </button>
+        </div>
+      </div>
     </div>
   );
 }
-
 
 export default function App() {
   const [tab, setTab] = useState("Daily Workout");
