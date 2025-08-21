@@ -25,6 +25,7 @@ import React, { useEffect, useMemo, useState } from "react";
 // =========================
 // Types
 // =========================
+type AdapterName = "mock" | "sheets";
 
 export type Exercise = {
   id: string;
@@ -497,12 +498,19 @@ function Tabs({ value, onChange }: { value: string; onChange: (v: string) => voi
   );
 }
 
-function SettingsView({ adapterName, setAdapterName }: { adapterName: string; setAdapterName: (s: string) => void }) {
+function SettingsView({
+  adapterName,
+  setAdapterName,
+}: {
+  adapterName: AdapterName;
+  setAdapterName: React.Dispatch<React.SetStateAction<AdapterName>>;
+}) {
+
   return (
     <div className="grid gap-4">
       <Section title="Data source">
         <div className="flex items-center gap-3">
-          <select value={adapterName} onChange={e => setAdapterName(e.target.value)} className="px-3 py-2 rounded-xl border">
+          <select value={adapterName} onChange={e => setAdapterName(e.target.value as AdapterName)} className="px-3 py-2 rounded-xl border">
             <option value="mock">Mock (local demo)</option>
             <option value="sheets">Google Sheets via Apps Script</option>
           </select>
@@ -524,9 +532,10 @@ function SettingsView({ adapterName, setAdapterName }: { adapterName: string; se
   );
 }
 
+
 export default function App() {
   const [tab, setTab] = useState("Daily Workout");
-  const [adapterName, setAdapterName] = useState<"mock" | "sheets">("mock");
+  const [adapterName, setAdapterName] = useState<AdapterName>("mock");
   const adapter = useMemo<DataAdapter>(() => adapterName === "mock" ? new MockAdapter() : new GoogleSheetsAdapter(), [adapterName]);
 
   return (
