@@ -19,17 +19,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+
+      # Debug: prove what the runner sees
+      - name: Debug workspace
+        run: |
+          pwd
+          ls -la
+          if [ -f package-lock.json ]; then echo "lockfile found"; else echo "lockfile MISSING"; fi
+
       - uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
-      - run: npm ci
+          cache-dependency-path: 'package-lock.json'   # <-- tell it exactly where the lockfile is
+
+      - run: npm ci                                   # uses the lockfile
       - run: npm run build
       - name: SPA fallback
         run: cp dist/index.html dist/404.html
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
+
   deploy:
     environment:
       name: github-pages
