@@ -18,7 +18,7 @@ type AdapterName = "mock" | "sheets";
 type TabName = "daily" | "cardio" | "settings";
 
 const API_BASE_URL =
-  "https://script.google.com/macros/s/AKfycbyZhTwMUAD7MoebK9rPBdpptVBKRRg4upx54Wr41toCZ4UaTCIw2m9mJi5F3LJ2tIOL5A/exec";
+  "https://script.google.com/macros/s/AKfycbwBpFcUcnwL15m2sil3C0LT4o8GNgFjAfdht_26ZaQ0EZ9PRN7-mHitX02olWqe-YkiRg/exec";
 const PROVISION_URL =
   "https://script.google.com/macros/s/AKfycbzSErIEb44zD1h9EXK9rFVW55cVz8zC_qenxKd7byRdksFfXqdzYqd-Anv3hI_pS0LWfg/exec";
 
@@ -878,9 +878,7 @@ export default function App() {
     () => localStorage.getItem(SHEET_ID_KEY) || ""
   );
   const [tab, setTab] = useState<TabName>("daily");
-  const [adapterName, setAdapterName] = useState<AdapterName>(
-    sid ? "sheets" : "mock"
-  );
+  const [adapterName, setAdapterName] = useState<"mock" | "sheets">(sid ? "sheets" : "mock");
 
   const adapter = useMemo<DataAdapter>(() => {
     return adapterName === "sheets"
