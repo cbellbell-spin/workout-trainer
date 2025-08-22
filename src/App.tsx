@@ -27,20 +27,20 @@ const SHEET_ID_KEY = "wt_sheet_id";
 // =========================
 // HTTP helpers used by Sheets adapter
 // =========================
-async function getJSON(action: string, params: Record<string, string>) {
+async function getJSON(action: string, params: Record<string,string>) {
   const url = new URL(API_BASE_URL);
   url.searchParams.set("action", action);
-  const sid = localStorage.getItem(SHEET_ID_KEY) || "";
-  if (sid) url.searchParams.set("sheetId", sid);
-  for (const [k, v] of Object.entries(params)) url.searchParams.set(k, v);
+  url.searchParams.set("sheetId", localStorage.getItem("wt_sheet_id") || "");
+  Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
+
+  console.debug("GET", url.toString()); // prod-safe
+
   const r = await fetch(url.toString(), { cache: "no-store" });
   const text = await r.text();
-  try {
-    return JSON.parse(text);
-  } catch {
-    throw new Error(`API returned non-JSON. First 120: ${text.slice(0, 120)}`);
-  }
+  try { return JSON.parse(text); }
+  catch { throw new Error(`API returned non-JSON. First 120: ${text.slice(0,120)}`); }
 }
+
 
 async function postJSON<T extends Record<string, any>>(
   action: string,
@@ -244,11 +244,13 @@ class MockAdapter implements DataAdapter {
 class GoogleSheetsAdapter implements DataAdapter {
   async listDays() {
     const j = await getJSON("listDays", {});
-    return (j.days as Array<{ day_id: string; day_name: string }>).map((d) => ({
-      id: String(d.day_id),
-      name: d.day_name,
+    const arr = (j.days as any[]) || [];
+    return arr.map((d: any) => ({
+      id: String(d.id ?? d.day_id),
+      name: String(d.name ?? d.day_name ?? d.id),
     }));
   }
+
 
   async getPlanForDay(day_id: string) {
     const j = await getJSON("getPlanForDay", { day: day_id });
