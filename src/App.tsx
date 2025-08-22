@@ -18,7 +18,7 @@ import React, { useEffect, useMemo, useState } from "react";
  * To wire up Google Sheets quickly
  * 1) Make a Google Sheet with the schemas at the bottom of this file
  * 2) Create an Apps Script web app that exposes GET/POST for read/write
- * 3) Set APPS_SCRIPT_BASE_URL below
+ * 3) Set API_BASE_URL below
  * 4) Switch adapter in the App component
  */
 
@@ -26,8 +26,9 @@ import React, { useEffect, useMemo, useState } from "react";
 // Types
 // =========================
 type AdapterName = "mock" | "sheets";
+const API_BASE_URL  = "https://script.google.com/macros/s/AKfycbyZhTwMUAD7MoebK9rPBdpptVBKRRg4upx54Wr41toCZ4UaTCIw2m9mJi5F3LJ2tIOL5A/exec";
+const PROVISION_URL = "https://script.google.com/macros/s/AKfycbzSErIEb44zD1h9EXK9rFVW55cVz8zC_qenxKd7byRdksFfXqdzYqd-Anv3hI_pS0LWfg/exec";
 
-const APPS_SCRIPT_BASE_URL = "https://script.google.com/macros/s/AKfycbw_cV-YyxjxWuWtNYC9sd4MKrVz2GyOc1vIa-73QeCVA4HwPmKaLyd_m9f4fTU9dY7_Og/execERE";
 const SHEET_ID_KEY = "wt_sheet_id";
 
 function sheetId(): string {
@@ -35,7 +36,7 @@ function sheetId(): string {
 }
 
 async function getJSON(action: string, params: Record<string,string>) {
-  const url = new URL(APPS_SCRIPT_BASE_URL);
+  const url = new URL(API_BASE_URL);
   url.searchParams.set("action", action);
   if (!url.searchParams.has("sheetId")) url.searchParams.set("sheetId", sheetId());
   Object.entries(params).forEach(([k,v]) => url.searchParams.set(k, v));
@@ -45,7 +46,7 @@ async function getJSON(action: string, params: Record<string,string>) {
 }
 
 async function postJSON(action: string, payload: any) {
-  const r = await fetch(APPS_SCRIPT_BASE_URL, {
+  const r = await fetch(API_BASE_URL, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ action, sheetId: sheetId(), payload }),
@@ -558,33 +559,26 @@ function SettingsView({
   );
 
 async function createBackend() {
-  try {
-    const popup = window.open(
-      `${APPS_SCRIPT_BASE_URL}?action=provisionPopup`,
-      "_blank",
-      "popup,width=520,height=640"
-    );
-    if (!popup) {
-      alert("Popup blocked. Allow popups for this site and try again.");
-      return;
-    }
+  const popup = window.open(
+    `${PROVISION_URL}?action=provisionPopup`,
+    "_blank",
+    "popup,width=520,height=640"
+  );
+  if (!popup) { alert("Popup blocked. Allow popups and try again."); return; }
 
-    // One-shot listener for the Apps Script message
-    const onMsg = (ev: MessageEvent) => {
-      const data = ev.data as any;
-      if (data && data.type === "wt/provisioned" && data.sheetId) {
-        localStorage.setItem(SHEET_ID_KEY, data.sheetId);
-        setAdapterName("sheets");
-        try { popup.close(); } catch {}
-        alert(`Backend created. You can open the Sheet at:\n${data.url}`);
-        window.removeEventListener("message", onMsg);
-      }
-    };
-    window.addEventListener("message", onMsg, { once: true });
-  } catch (e: any) {
-    alert("Provision error: " + e.message);
-  }
+  const onMsg = (ev: MessageEvent) => {
+    const data = ev.data as any;
+    if (data && data.type === "wt/provisioned" && data.sheetId) {
+      localStorage.setItem(SHEET_ID_KEY, data.sheetId);
+      setAdapterName("sheets");
+      try { popup.close(); } catch {}
+      alert(`Backend created. You can open the Sheet at:\n${data.url}`);
+      window.removeEventListener("message", onMsg);
+    }
+  };
+  window.addEventListener("message", onMsg, { once: true });
 }
+
 
   function useTypedSheet() {
     const id = sheetIdInput.trim();
