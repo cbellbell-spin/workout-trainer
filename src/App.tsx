@@ -637,8 +637,10 @@ async function createBackend() {
 
 export default function App() {
   const [tab, setTab] = useState("Daily Workout");
-  const [adapterName, setAdapterName] = useState<AdapterName>("mock");
-  const adapter = useMemo<DataAdapter>(() => adapterName === "mock" ? new MockAdapter() : new GoogleSheetsAdapter(), [adapterName]);
+const [adapterName, setAdapterName] = useState<AdapterName>(() =>
+  localStorage.getItem(SHEET_ID_KEY) ? "sheets" : "mock"
+);
+const adapter = useMemo<DataAdapter>(() => adapterName === "mock" ? new MockAdapter() : new GoogleSheetsAdapter(), [adapterName]);
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 text-gray-900">
