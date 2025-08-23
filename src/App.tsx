@@ -2,13 +2,12 @@ import React, { useEffect, useMemo, useState } from "react";
 
 /**
  * Workout Tracker Web App
- * - Mobile first, works on desktop
- * - Tailwind CSS for styling
+ * - Mobile first, works on desktop (Tailwind)
  * - Adapter pattern so you can swap data sources
  *
  * Adapters:
  *  - MockAdapter (in-memory demo)
- *  - GoogleSheetsAdapter (Apps Script REST bridge)
+ *  - GoogleSheetsAdapter (Cloudflare Worker REST bridge)
  */
 
 // =========================
@@ -17,28 +16,62 @@ import React, { useEffect, useMemo, useState } from "react";
 type AdapterName = "mock" | "sheets";
 type TabName = "daily" | "cardio" | "settings";
 
-const API_BASE_URL =
-  "https://workout-trainer.cbell-bell.workers.dev/api/sheets";
+const API_BASE_URL = "https://workout-trainer.cbell-bell.workers.dev/api/sheets";
 const PROVISION_URL =
   "https://script.google.com/macros/s/AKfycbzSErIEb44zD1h9EXK9rFVW55cVz8zC_qenxKd7byRdksFfXqdzYqd-Anv3hI_pS0LWfg/exec";
-
 const SHEET_ID_KEY = "wt_sheet_id";
+
+// =========================
+// Tiny toast
+// =========================
+type ToastKind = "error" | "success";
+type ToastState = { open: boolean; kind: ToastKind; msg: string };
+
+function useToast() {
+  const [data, setData] = useState<ToastState>({
+    open: false,
+    kind: "success",
+    msg: "",
+  });
+  const notify = (kind: ToastKind, msg: string, ms = 3000) => {
+    setData({ open: true, kind, msg });
+    window.setTimeout(() => setData((t) => ({ ...t, open: false })), ms);
+  };
+  return { data, notify };
+}
+
+function Toast({ data }: { data: ToastState }) {
+  if (!data.open) return null;
+  return (
+    <div
+      className={`fixed bottom-4 left-1/2 -translate-x-1/2 z-50 rounded-xl px-4 py-2 text-white shadow-lg
+                  ${data.kind === "error" ? "bg-red-600" : "bg-emerald-600"}`}
+      role="status"
+      aria-live="polite"
+    >
+      {data.msg}
+    </div>
+  );
+}
 
 // =========================
 // HTTP helpers used by Sheets adapter
 // =========================
-async function getJSON(action: string, params: Record<string,string>) {
+async function getJSON(action: string, params: Record<string, string>) {
   const url = new URL(API_BASE_URL);
   url.searchParams.set("action", action);
-  url.searchParams.set("sheetId", localStorage.getItem("wt_sheet_id") || "");
+  url.searchParams.set("sheetId", localStorage.getItem(SHEET_ID_KEY) || "");
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-  console.debug("GET", url.toString()); // prod-safe
   const r = await fetch(url.toString(), { cache: "no-store" });
   const text = await r.text();
-  try { return JSON.parse(text); }
-  catch { throw new Error(`API returned non-JSON. First 120: ${text.slice(0,120)}`); }
+  try {
+    return JSON.parse(text);
+  } catch {
+    throw new Error(
+      `API returned non-JSON. First 120: ${text.slice(0, 120)}`
+    );
+  }
 }
-
 
 async function postJSON<T extends Record<string, any>>(
   action: string,
@@ -54,7 +87,7 @@ async function postJSON<T extends Record<string, any>>(
 }
 
 // =========================
-/** Types */
+// Types
 // =========================
 export type Exercise = {
   id: string;
@@ -129,7 +162,7 @@ interface DataAdapter {
 }
 
 // =========================
-// Mock adapter (single source of truth)
+// Mock adapter
 // =========================
 const MOCK_DB = (() => {
   const exercises: Record<string, Exercise> = {
@@ -237,17 +270,16 @@ class MockAdapter implements DataAdapter {
 }
 
 // =========================
-/** Google Sheets adapter using Apps Script */
+// Google Sheets adapter (via Worker)
 // =========================
 class GoogleSheetsAdapter implements DataAdapter {
   async listDays() {
-  const j = await getJSON("listDays", {});
-  return (j.days as any[]).map(d => ({
-    id: String(d.id ?? d.day_id),
-    name: String(d.name ?? d.day_name ?? d.id),
-  }));
-}
-
+    const j = await getJSON("listDays", {});
+    return (j.days as any[]).map((d) => ({
+      id: String(d.id ?? d.day_id),
+      name: String(d.name ?? d.day_name ?? d.id),
+    }));
+  }
   async getPlanForDay(day_id: string) {
     const j = await getJSON("getPlanForDay", { day: day_id });
     return {
@@ -255,7 +287,6 @@ class GoogleSheetsAdapter implements DataAdapter {
       exercises: (j.exercises || {}) as Record<string, Exercise>,
     };
   }
-
   async listCardio(dateRange?: { start_iso: string; end_iso: string }) {
     const params: Record<string, string> = {};
     if (dateRange) {
@@ -268,7 +299,6 @@ class GoogleSheetsAdapter implements DataAdapter {
       logs: (j.logs || []) as CardioLog[],
     };
   }
-
   async saveStrengthLog(log: StrengthLog) {
     return await postJSON("saveStrengthLog", log);
   }
@@ -433,7 +463,13 @@ function Block({
   return <Section title={name}>{rows}</Section>;
 }
 
-function DayWorkoutView({ adapter }: { adapter: DataAdapter }) {
+function DayWorkoutView({
+  adapter,
+  notify,
+}: {
+  adapter: DataAdapter;
+  notify?: (t: "error" | "success", m: string) => void;
+}) {
   const [days, setDays] = useState<{ id: string; name: string }[]>([]);
   const [selectedDay, setSelectedDay] = useState<string>("");
   const [plan, setPlan] = useState<PlanRow[]>([]);
@@ -442,17 +478,23 @@ function DayWorkoutView({ adapter }: { adapter: DataAdapter }) {
   const [status, setStatus] = useState<string>("");
 
   useEffect(() => {
-    adapter.listDays().then(setDays);
+    adapter
+      .listDays()
+      .then(setDays)
+      .catch(() => notify?.("error", "Couldn't reach your Sheet"));
   }, [adapter]);
 
   useEffect(() => {
     if (!selectedDay) return;
     setLoading(true);
-    adapter.getPlanForDay(selectedDay).then(({ plan, exercises }) => {
-      setPlan(plan);
-      setExMap(exercises);
-      setLoading(false);
-    });
+    adapter
+      .getPlanForDay(selectedDay)
+      .then(({ plan, exercises }) => {
+        setPlan(plan);
+        setExMap(exercises);
+      })
+      .catch(() => notify?.("error", "Couldn't reach your Sheet"))
+      .finally(() => setLoading(false));
   }, [adapter, selectedDay]);
 
   const blocks = useMemo(() => {
@@ -504,8 +546,11 @@ function DayWorkoutView({ adapter }: { adapter: DataAdapter }) {
       exercise_id,
       ...data,
     };
-    adapter.saveStrengthLog(log).then(() => setStatus("Saved"));
-    setTimeout(() => setStatus(""), 1500);
+    adapter
+      .saveStrengthLog(log)
+      .then(() => setStatus("Saved"))
+      .catch(() => notify?.("error", "Couldn't reach your Sheet"));
+    window.setTimeout(() => setStatus(""), 1500);
   }
 
   // Simple AI add alternative exercise flow
@@ -523,9 +568,7 @@ function DayWorkoutView({ adapter }: { adapter: DataAdapter }) {
       });
       const ex: Exercise = await r.json();
 
-      // 1) Save exercise
       const addRes = await adapter.addExercise(ex);
-      // 2) Add to plan
       await adapter.addPlanRow({
         day_id: selectedDay,
         day_name: days.find((d) => d.id === selectedDay)?.name || selectedDay,
@@ -535,11 +578,12 @@ function DayWorkoutView({ adapter }: { adapter: DataAdapter }) {
         exercise_id: addRes.exercise_id,
         prescribed_reps: ex.default_reps,
       });
-      // 3) Reload
       const updated = await adapter.getPlanForDay(selectedDay);
       setPlan(updated.plan);
       setExMap(updated.exercises);
       setAiQuery("");
+    } catch {
+      notify?.("error", "Couldn't reach your Sheet");
     } finally {
       setAiBusy(false);
     }
@@ -603,7 +647,13 @@ function DayWorkoutView({ adapter }: { adapter: DataAdapter }) {
   );
 }
 
-function CardioView({ adapter }: { adapter: DataAdapter }) {
+function CardioView({
+  adapter,
+  notify,
+}: {
+  adapter: DataAdapter;
+  notify: (t: "error" | "success", m: string) => void;
+}) {
   const [rows, setRows] = useState<CardioPlanRow[]>([]);
   const [logs, setLogs] = useState<CardioLog[]>([]);
   const [newLog, setNewLog] = useState<CardioLog>({
@@ -613,20 +663,27 @@ function CardioView({ adapter }: { adapter: DataAdapter }) {
   const [status, setStatus] = useState<string>("");
 
   useEffect(() => {
-    adapter.listCardio().then(({ plan, logs }) => {
-      setRows(plan);
-      setLogs(logs);
-    });
-  }, [adapter]);
+    adapter
+      .listCardio()
+      .then(({ plan, logs }) => {
+        setRows(plan);
+        setLogs(logs);
+      })
+      .catch(() => notify("error", "Couldn't reach your Sheet"));
+  }, [adapter, notify]);
 
   async function save() {
-    const res = await adapter.saveCardioLog(newLog);
-    if (res.ok) {
-      setStatus("Saved");
-      const { plan, logs } = await adapter.listCardio();
-      setRows(plan);
-      setLogs(logs);
-      setTimeout(() => setStatus(""), 1500);
+    try {
+      const res = await adapter.saveCardioLog(newLog);
+      if (res.ok) {
+        setStatus("Saved");
+        const { plan, logs } = await adapter.listCardio();
+        setRows(plan);
+        setLogs(logs);
+        window.setTimeout(() => setStatus(""), 1500);
+      }
+    } catch {
+      notify("error", "Couldn't reach your Sheet");
     }
   }
 
@@ -841,7 +898,7 @@ function SettingsView({
           className="px-3 py-2 rounded-xl border"
         >
           <option value="mock">Mock (local demo)</option>
-          <option value="sheets">Google Sheets via Apps Script</option>
+          <option value="sheets">Google Sheets via Worker</option>
         </select>
       </div>
 
@@ -857,7 +914,9 @@ function SettingsView({
             className="px-3 py-2 rounded-xl border w-full"
             value={sheetIdInput}
             onChange={(e) => setSheetIdInput(e.target.value)}
-            onBlur={() => localStorage.setItem(SHEET_ID_KEY, sheetIdInput.trim())}
+            onBlur={() =>
+              localStorage.setItem(SHEET_ID_KEY, sheetIdInput.trim())
+            }
           />
           <button className="px-3 py-2 rounded-xl border" onClick={useTypedSheet}>
             Use this Sheet
@@ -876,13 +935,17 @@ export default function App() {
     () => localStorage.getItem(SHEET_ID_KEY) || ""
   );
   const [tab, setTab] = useState<TabName>("daily");
-  const [adapterName, setAdapterName] = useState<"mock" | "sheets">(sid ? "sheets" : "mock");
+  const [adapterName, setAdapterName] = useState<AdapterName>(
+    sid ? "sheets" : "mock"
+  );
 
   const adapter = useMemo<DataAdapter>(() => {
     return adapterName === "sheets"
       ? new GoogleSheetsAdapter()
       : new MockAdapter();
   }, [adapterName, sid]);
+
+  const { data: toast, notify } = useToast();
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 text-gray-900">
@@ -897,8 +960,12 @@ export default function App() {
           <Tabs value={tab} onChange={setTab} />
         </header>
 
-        {tab === "daily" && <DayWorkoutView adapter={adapter} />}
-        {tab === "cardio" && <CardioView adapter={adapter} />}
+        {tab === "daily" && (
+          <DayWorkoutView adapter={adapter} notify={notify} />
+        )}
+        {tab === "cardio" && (
+          <CardioView adapter={adapter} notify={notify} />
+        )}
         {tab === "settings" && (
           <SettingsView
             adapterName={adapterName}
@@ -906,14 +973,16 @@ export default function App() {
             setSid={setSid}
           />
         )}
-
-        <footer className="mt-10 text-xs text-gray-500">
-          <p>
-            Pro tip: every exercise row is a separate set. Use the AI button to
-            inject alternates fast.
-          </p>
-        </footer>
       </div>
+
+      <footer className="mt-10 text-xs text-gray-500 text-center">
+        <p>
+          Pro tip: every exercise row is a separate set. Use the AI button to
+          inject alternates fast.
+        </p>
+      </footer>
+
+      <Toast data={toast} />
     </div>
   );
 }
