@@ -18,7 +18,7 @@ type AdapterName = "mock" | "sheets";
 type TabName = "daily" | "cardio" | "settings";
 
 const API_BASE_URL =
-  "https://script.google.com/macros/s/AKfycbwBpFcUcnwL15m2sil3C0LT4o8GNgFjAfdht_26ZaQ0EZ9PRN7-mHitX02olWqe-YkiRg/exec";
+  "https://workout-trainer.cbell-bell.workers.dev/api/sheets";
 const PROVISION_URL =
   "https://script.google.com/macros/s/AKfycbzSErIEb44zD1h9EXK9rFVW55cVz8zC_qenxKd7byRdksFfXqdzYqd-Anv3hI_pS0LWfg/exec";
 
@@ -32,10 +32,9 @@ async function getJSON(action: string, params: Record<string,string>) {
   url.searchParams.set("action", action);
   url.searchParams.set("sheetId", localStorage.getItem("wt_sheet_id") || "");
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
-
   console.debug("GET", url.toString()); // prod-safe
-
   const r = await fetch(url.toString(), { cache: "no-store" });
+  const t = await r.text();
   const text = await r.text();
   try { return JSON.parse(text); }
   catch { throw new Error(`API returned non-JSON. First 120: ${text.slice(0,120)}`); }
