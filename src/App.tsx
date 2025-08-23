@@ -241,14 +241,12 @@ class MockAdapter implements DataAdapter {
 // =========================
 class GoogleSheetsAdapter implements DataAdapter {
   async listDays() {
-    const j = await getJSON("listDays", {});
-    const arr = (j.days as any[]) || [];
-    return arr.map((d: any) => ({
-      id: String(d.id ?? d.day_id),
-      name: String(d.name ?? d.day_name ?? d.id),
-    }));
-  }
-
+  const j = await getJSON("listDays", {});
+  return (j.days as any[]).map(d => ({
+    id: String(d.id ?? d.day_id),
+    name: String(d.name ?? d.day_name ?? d.id),
+  }));
+}
 
   async getPlanForDay(day_id: string) {
     const j = await getJSON("getPlanForDay", { day: day_id });
