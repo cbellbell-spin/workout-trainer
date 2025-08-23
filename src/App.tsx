@@ -34,7 +34,6 @@ async function getJSON(action: string, params: Record<string,string>) {
   Object.entries(params).forEach(([k, v]) => url.searchParams.set(k, v));
   console.debug("GET", url.toString()); // prod-safe
   const r = await fetch(url.toString(), { cache: "no-store" });
-  const t = await r.text();
   const text = await r.text();
   try { return JSON.parse(text); }
   catch { throw new Error(`API returned non-JSON. First 120: ${text.slice(0,120)}`); }
