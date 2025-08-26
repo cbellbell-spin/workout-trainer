@@ -1,23 +1,48 @@
 <!doctype html>
 <html lang="en">
   <head>
-    <meta charset="UTF-8" />
-    <!-- mobile viewport, safe areas, and icons -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=3">
-    <link rel="apple-touch-icon" href="apple-touch-icon.png?v=1">
-    <meta name="theme-color" content="#111827">
+    <meta charset="utf-8" />
+    <!-- Critical for iPhone layout + notch support -->
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
 
     <title>Workout Trainer</title>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <!-- mobile viewport, safe areas, and icons -->
-    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-    <link rel="icon" type="image/svg+xml" href="favicon.svg?v=3">
-    <link rel="apple-touch-icon" href="apple-touch-icon.png?v=2">
-    <meta name="theme-color" content="#111827">
+    <meta name="description" content="Track daily strength and cardio workouts." />
+    <meta name="theme-color" content="#111827" />
+
+    <!-- iOS PWA-ish niceties (helps status bar blend with the app) -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+
+    <!-- Favicons (make sure these files exist in /public) -->
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+<link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png" />
+<link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
+<link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
+<link rel="manifest" href="/site.webmanifest" />
+<link rel="mask-icon" href="/safari-pinned-tab.svg" color="#111827" />
+
+
+    <!-- Minimal safe-area + full-height baseline for mobile -->
+    <style>
+      :root { color-scheme: light dark; }
+      html, body, #root { height: 100%; }
+      body {
+        margin: 0;
+        background: #f9fafb; /* Tailwind gray-50 */
+        /* Respect iPhone safe areas while letting your Tailwind layout fill the screen */
+        padding: env(safe-area-inset-top) env(safe-area-inset-right)
+                 env(safe-area-inset-bottom) env(safe-area-inset-left);
+        -webkit-text-size-adjust: 100%; /* avoid auto text zoom */
+      }
+    </style>
   </head>
-  <body class="min-h-screen bg-gray-50">
+  <body>
+    <noscript>You need JavaScript enabled to run this app.</noscript>
     <div id="root"></div>
+
+    <!-- Vite entry (adjust if your entry file differs) -->
     <script type="module" src="/src/main.tsx"></script>
+    <!-- If you're on Create React App instead, remove the line above and let CRA inject scripts -->
   </body>
 </html>
+
