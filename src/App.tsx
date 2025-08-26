@@ -690,7 +690,7 @@ function CardioView({
   return (
     <div className="grid gap-6">
       <Section title="New cardio log">
-        <div className="grid grid-cols-6 gap-2 max-[920px]:grid-cols-2">
+       <div className="grid gap-2 grid-cols-6 md:grid-cols-3 sm:grid-cols-2 max-[480px]:grid-cols-1">
           <input
             className="px-3 py-2 rounded-xl border"
             value={newLog.date_iso}
