@@ -948,43 +948,37 @@ export default function App() {
   const { data: toast, notify } = useToast();
 
   return (
-    <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 text-gray-900">
-      <div className="max-w-4xl mx-auto p-4 sm:p-6">
-        <header className="mb-6 flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-bold">Workout Tracker</h1>
-            <p className="text-sm text-gray-600">
-              Strength and cardio in one place
-            </p>
-          </div>
-          <Tabs value={tab} onChange={setTab} />
-        </header>
-
-        {tab === "daily" && (
-          <DayWorkoutView adapter={adapter} notify={notify} />
-        )}
-        {tab === "cardio" && (
-          <CardioView adapter={adapter} notify={notify} />
-        )}
-        {tab === "settings" && (
-          <SettingsView
-            adapterName={adapterName}
-            setAdapterName={setAdapterName}
-            setSid={setSid}
-          />
-        )}
+  <div className="min-h-screen bg-gradient-to-b from-gray-50 to-gray-100 text-gray-900 flex flex-col">
+    <header className="w-full">
+      <div className="max-w-4xl mx-auto p-4 sm:p-6 flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Workout Tracker</h1>
+          <p className="text-sm text-gray-600">Strength and cardio in one place</p>
+        </div>
+        <Tabs value={tab} onChange={setTab} />
       </div>
+    </header>
 
-      <footer className="mt-10 text-xs text-gray-500 text-center">
-        <p>
-          Pro tip: every exercise row is a separate set. Use the AI button to
-          inject alternates fast.
-        </p>
-      </footer>
+    <main className="flex-1 w-full max-w-4xl mx-auto p-4 sm:p-6">
+      {tab === "daily" && <DayWorkoutView adapter={adapter} notify={notify} />}
+      {tab === "cardio" && <CardioView adapter={adapter} notify={notify} />}
+      {tab === "settings" && (
+        <SettingsView
+          adapterName={adapterName}
+          setAdapterName={setAdapterName}
+          setSid={setSid}
+        />
+      )}
+    </main>
 
-      <Toast data={toast} />
-    </div>
-  );
+    <footer className="w-full mt-6 text-xs text-gray-500 max-w-4xl mx-auto p-4 sm:p-6">
+      <p>Pro tip: every exercise row is a separate set. Use the AI button to inject alternates fast.</p>
+    </footer>
+
+    {/* toast */}
+    <Toast data={toast} />
+  </div>
+);
 }
 
 /*
